@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  auth-service:
+    container_name: auth-service
+    restart: unless-stopped
+
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile
+
+    command:  /bin/sh -c "./api > /go/app/log/log.json 2>&1"
+
+    environment:
+      - DB_PORT=${DB_PORT}
+      - DB_HOST=${DB_HOST}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - JWT_SIGN_KEY=${JWT_SIGN_KEY}
+      - HOST=${HOST}
+
+    ports:
+      - ${PORT}:${PORT}
+
+    networks:
+      - caddy-network
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT}/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    volumes:
+      - ./log:/go/app/log
+
+    depends_on:
+      - postgres
+
+  postgres:
+    container_name: postgres
+    image: postgres:17.0-alpine3.20
+    restart: on-failure
+
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    expose:
+      - ${DB_PORT}
+
+    networks:
+      - caddy-network
+
+    ports:
+      - ${DB_PORT}:${DB_PORT}
+    command: -p ${DB_PORT}
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+
+    ports:
+      - 80:80
+      - 443:443
+
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./Caddyfile:/etc/caddy/Caddyfile
+
+    restart: unless-stopped
+    networks:
+      - caddy-network
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  caddy-network:
+    driver: bridge
